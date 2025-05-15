@@ -11,9 +11,6 @@ RUN npm install
 # Copy the application code
 COPY . .
 
-# Rename vite.config.js to vite.config.mjs for ESM compatibility
-RUN mv vite.config.js vite.config.mjs
-
 # Build the Vite application
 RUN npm run build
 
