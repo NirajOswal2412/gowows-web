@@ -1,5 +1,5 @@
 # Use the Node.js 18 base image
-FROM node:18
+FROM node:20
 
 # Set the working directory
 WORKDIR /
@@ -10,6 +10,9 @@ RUN npm install
 
 # Copy the application code
 COPY . .
+
+# Rename vite.config.js to vite.config.mjs for ESM compatibility
+RUN mv vite.config.js vite.config.mjs
 
 # Build the Vite application
 RUN npm run build

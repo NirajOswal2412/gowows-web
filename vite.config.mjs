@@ -9,9 +9,17 @@ export default defineConfig({
       targets: [
         {
           src: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
-          dest: 'pdfjs'
+          dest: 'pdfgs'
         }
       ]
     })
-  ]
+  ],
+  server: {
+    port: 8080,
+    host: true // To make it accessible from outside Docker
+  },
+  preview: {
+    port: 8080,
+    host: true
+  }
 });
