@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<title>Login | GoWows Chat</title>
+<style>
+body {
+  font-family: "Segoe UI", sans-serif;
+  background-color: #fffaf0;
+  color: #222;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 500px;
+  margin: 40px auto;
+  background: white;
+  padding: 30px 40px;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+input, select {
+  display: block;
+  margin: 12px 0;
+  padding: 10px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: #f87171;
+  box-shadow: 0 0 6px #f87171;
+}
+button {
+  padding: 10px 16px;
+  background-color: #f87171;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 5px;
+}
+button:hover {
+  background-color: #f44336;
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
+.tab {
+  cursor: pointer;
+  margin-right: 12px;
+  font-weight: bold;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.tab.active {
+  background-color: #f87171;
+  color: white;
+}
+.tabs {
+  margin-bottom: 20px;
+}
+table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: left;
+}
+</style>
+</head>
+<body>
+<div class="container"><img alt="Saathi Logo" src="assets/logo.png" style="display: block; margin: 0 auto 20px; height: 50px;"/>
+<h2>GoWows Chat - Login/Register</h2>
+<div class="tabs">
+<span class="tab active" onclick="showForm('login')">Login</span>
+<span class="tab" onclick="showForm('register')">Register</span>
+<span class="tab" onclick="showForm('admin')">Admin Console</span>
+</div>
+<!-- Login Form -->
+<div id="login-form">
+<input id="login-username" placeholder="Username" type="text"/>
+<input id="login-password" placeholder="Password" type="password"/>
+<button onclick="login()">Login</button>
+</div>
+<!-- Register Form -->
+<div id="register-form" style="display: none;">
+<input id="register-username" placeholder="Username" type="text"/>
+<input id="register-password" placeholder="Password" type="password"/>
+<input id="register-display-name" placeholder="Display Name" type="text"/>
+<button onclick="register()">Register</button>
+</div>
+<!-- Admin Console Form -->
+<div id="admin-form" style="display: none;">
+<input id="admin-username" placeholder="Admin Username" type="text"/>
+<input id="admin-password" placeholder="Admin Password" type="password"/>
+<button onclick="adminLogin()">Login to Admin Console</button>
+<div id="admin-panel" style="margin-top: 20px;"></div>
+</div>
+<div id="output" style="margin-top: 20px; font-weight: bold;"></div>
+</div>
+<script>
+    const apiBase = "http://localhost:7860";
+    let adminToken = null;
+
+    function showForm(form) {
+      document.getElementById("login-form").style.display = form === "login" ? "block" : "none";
+      document.getElementById("register-form").style.display = form === "register" ? "block" : "none";
+      document.getElementById("admin-form").style.display = form === "admin" ? "block" : "none";
+      document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+      document.querySelector(`.tab[onclick="showForm('${form}')"]`).classList.add("active");
+      document.getElementById("output").innerText = "";
+    }
+
+    async function login() {
+      const username = document.getElementById("login-username").value;
+      const password = document.getElementById("login-password").value;
+
+      const res = await fetch(`${apiBase}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        document.getElementById("output").innerText = "✅ Logged in successfully!";
+        setTimeout(() => {
+          window.location.href = "http://localhost:5173";
+        }, 1000);
+      } else {
+        document.getElementById("output").innerText = `❌ ${data.error}`;
+      }
+    }
+
+    async function register() {
+      const username = document.getElementById("register-username").value;
+      const password = document.getElementById("register-password").value;
+      const display_name = document.getElementById("register-display-name").value;
+
+      const res = await fetch(`${apiBase}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, display_name })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById("output").innerText = "✅ Registered. Please login.";
+        showForm('login');
+      } else {
+        document.getElementById("output").innerText = `❌ ${data.error}`;
+      }
+    }
+
+    async function adminLogin() {
+      const username = document.getElementById("admin-username").value;
+      const password = document.getElementById("admin-password").value;
+
+      const res = await fetch(`${apiBase}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById("output").innerText = `❌ ${data.error}`;
+        return;
+      }
+
+      adminToken = data.token;
+
+      const meRes = await fetch(`${apiBase}/me`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+
+      const me = await meRes.json();
+      if (me.role !== "admin") {
+        document.getElementById("output").innerText = "❌ Access denied. Not an admin.";
+        return;
+      }
+
+      document.getElementById("output").innerText = `✅ Welcome Admin ${me.display_name}`;
+      loadUserTable();
+    }
+
+ async function loadUserTable() {
+  const res = await fetch(`${apiBase}/users`, {
+    headers: { Authorization: `Bearer ${adminToken}` }
+  });
+
+const resData = await res.json();
+const users = resData.users || resData;  // supports both { users: [...] } and [ ... ]
+
+if (!Array.isArray(users)) {
+  document.getElementById("admin-panel").innerText = "⚠️ Error loading users.";
+  return;
+}
+
+
+  let html = `<table>
+    <tr>
+      <th>Username</th>
+      <th>Display Name</th>
+      <th>Role</th>
+	  
+      <th>Reset Password</th>
+    </tr>`;
+
+  users.forEach(user => {
+    html += `
+      <tr>
+        <td>${user.username}</td>
+        <td>${user.display_name}</td>
+        <td>
+          <select id="role-${user.username}">
+            <option value="user" ${user.role === "user" ? "selected" : ""}>User</option>
+            <option value="super_user" ${user.role === "super_user" ? "selected" : ""}>Super User</option>
+            <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+          </select>
+          <button onclick="updateRole('${user.username}')">Update Role</button>
+        </td>
+		<td>
+          <input type="password" placeholder="New Password" id="pass-${user.username}">
+          <button onclick="resetPassword('${user.username}')">Reset Password</button>
+        </td>
+      </tr>`;
+  });
+
+  html += `</table>`;
+  document.getElementById("admin-panel").innerHTML = html;
+}
+
+
+    async function updateRole(username) {
+      const newRole = document.getElementById(`role-${username}`).value;
+      const res = await fetch(`${apiBase}/update-role`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ username, role: newRole })
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        alert(`✅ ${result.message}`);
+        loadUserTable();
+      } else {
+        alert(`❌ ${result.error}`);
+      }
+    }
+
+    async function resetPassword(username) {
+      const newPassword = document.getElementById(`pass-${username}`).value;
+
+      if (!newPassword) {
+        alert("⚠️ Enter a new password.");
+        return;
+      }
+
+      const res = await fetch(`${apiBase}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ username, password: newPassword })
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        alert(`✅ ${result.message}`);
+        document.getElementById(`pass-${username}`).value = "";
+      } else {
+        alert(`❌ ${result.error}`);
+      }
+    }
+  </script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const inputs = document.querySelectorAll("input");
+  inputs.forEach(input => {
+    input.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        login();
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
