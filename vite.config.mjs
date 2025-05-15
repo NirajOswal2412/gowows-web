@@ -20,6 +20,11 @@ export default defineConfig({
   },
   preview: {
     port: 8080,
-    host: true
+    host: true,
+    strictPort: true,
+    allowedHosts: [
+      'localhost',
+      'gowows-web-252628919239.asia-south1.run.app' // ✅ Add your Cloud Run domain here
+    ]
   }
 });
