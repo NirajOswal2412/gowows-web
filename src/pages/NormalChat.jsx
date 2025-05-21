@@ -3,6 +3,9 @@ import { useSecureFetch } from '../utils/useSecureFetch';
 import { useChatStore } from '../store/useChatStore';
 import { BASE_URL } from "../config";
 import { useSharedStateStore } from '../store/useSharedStateStore';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 
 const NormalChat = () => {
   const secureFetch = useSecureFetch();
@@ -16,7 +19,6 @@ const NormalChat = () => {
     clearMessages,
   } = chatStore;
   
-
   const [loading, setLoading] = useState(false);
   const {
     getSmartPrompts,
@@ -24,7 +26,7 @@ const NormalChat = () => {
     getOutlineText,
     setOutlineText
   } = useSharedStateStore();
-  
+
   const smartPrompts = getSmartPrompts("normal");
   const outlineText = getOutlineText("normal");
   
@@ -71,49 +73,67 @@ const NormalChat = () => {
     setLoading(true);
   
     try {
-      const res = await secureFetch(`${BASE_URL}/chat`, {
-        method: 'POST',
-        body: JSON.stringify({ message: msg })
-      });
-  
-      if (!res) return;
-      const data = await res.json();
-      const botText = data?.response?.trim() || '⚠️ No valid reply received.';
-      const botMessage = {
-        from: 'Saathi',
-        text: botText,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-  
-      // ✅ get current messages from state
-      const updatedMessages = useChatStore.getState().messages;
-  
-      // ✅ replace just the thinking bubble
-      const finalMessages = updatedMessages.map((m) =>
-        m.typing ? botMessage : m
-      );
-      setMessages(finalMessages);
-  
-      fetchPrompts(botText);
-    } catch (err) {
-      console.error("Chat error:", err);
-      const errMsg = {
-        from: 'Saathi',
-        text: '⚠️ Error contacting server.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-  
-      const updatedMessages = useChatStore.getState().messages;
-      const finalMessages = updatedMessages.map((m) =>
-        m.typing ? errMsg : m
-      );
-      setMessages(finalMessages);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+        const res = await fetch(`${BASE_URL}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    });
 
+    if (!res.ok || !res.body) throw new Error("Stream failed");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    let lastChar = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) {
+        result += chunk;  // ✅ Append directly, no manual spacing
+
+        const updated = useChatStore.getState().messages.map((m) =>
+          m.typing ? { ...m, text: result } : m
+        );
+        setMessages(updated);
+      }
+    }
+
+    // Final message construction
+    const updatedMessages = useChatStore.getState().messages;
+    const finalBotMessage = {
+      from: 'Saathi',
+      text: result.trim() || '⚠️ No valid reply received.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const finalMessages = updatedMessages.map((m) =>
+      m.typing ? finalBotMessage : m
+    );
+
+    setMessages(finalMessages);
+    fetchPrompts(result);
+
+  } catch (err) {
+    console.error("Chat error:", err);
+    const errMsg = {
+      from: 'Saathi',
+      text: '⚠️ Error contacting server.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const updatedMessages = useChatStore.getState().messages;
+    const finalMessages = updatedMessages.map((m) =>
+      m.typing ? errMsg : m
+    );
+    setMessages(finalMessages);
+  } finally {
+    setLoading(false);
+  }
+};
+  
   const generateOutline = async (text) => {
     try {
       const res = await secureFetch(`${BASE_URL}/generate-outline`, {
@@ -225,71 +245,119 @@ const NormalChat = () => {
   };
 
   return (
-    <div className="chat-page-container">
-      <h2 className="section-title">🧠 Normal Chat</h2>
+    <>
+      <div className="chat-page-container">
+        <h2 className="section-title">🧠 Normal Chat</h2>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {Array.isArray(messages) && messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`chat-bubble-${msg.from === 'You' ? 'user' : 'bot'}`}
-            style={{ alignSelf: msg.from === 'You' ? 'flex-end' : 'flex-start' }}
-          >
-            {msg.time && <div className="chat-time">{msg.time}</div>}
-            <div style={{ marginTop: '14px' }}>
-              <strong>{msg.from}:</strong> {msg.text}
-            </div>
-            {msg.from === 'Saathi' && msg.text !== '💭 Thinking...' && (
-              <div style={{ marginTop: '4px', display: 'flex', gap: '6px' }}>
-                <button onClick={() => speakReply(msg.text)} style={buttonStyle}>🔈 Read</button>
-                <button onClick={() => generateOutline(msg.text)} style={buttonStyle}>🧾 Generate Outline</button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {showOutlineModal && (
-        <div style={modalStyle}>
-          <h3>🧾 Presentation Outline</h3>
-          <div style={{ marginTop: "1px", display: "flex", gap: "10px" }}>
-            <button onClick={() => navigator.clipboard.writeText(outlineText)}>📋 Copy</button>
-            <button onClick={exportToPPT}>📊 Export to PPT</button>
-            <button onClick={exportToPDF}>📄 Export to PDF</button>
-            <button onClick={() => setShowOutlineModal(false)}>❌ Close</button>
-          </div>
-          <pre style={preStyle}>{outlineText}</pre>
-        </div>
-      )}
-
-      {smartPrompts.length > 0 && (
-        <div style={{ padding: '10px 20px' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Suggestions:</div>
-          {smartPrompts.map((prompt, idx) => (
-            <button
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {Array.isArray(messages) && messages.map((msg, idx) => (
+            <div
               key={idx}
-              onClick={() => setInput(prompt)}
-              style={promptStyle}
+              className={`chat-bubble-${msg.from === 'You' ? 'user' : 'bot'}`}
+              style={{ alignSelf: msg.from === 'You' ? 'flex-end' : 'flex-start' }}
             >
-              {`${idx + 1}. ${prompt}`}
-            </button>
+              {msg.time && <div className="chat-time">{msg.time}</div>}
+
+              <div className="message-content">
+                <span className="sender-label">{msg.from}:</span>
+                <div className="message-text">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text}
+                  </ReactMarkdown>
+                </div>
+              </div>
+
+              {msg.from === 'Saathi' && msg.text !== '💭 Thinking...' && (
+                <div style={{ marginTop: '4px', display: 'flex', gap: '6px' }}>
+                  <button onClick={() => speakReply(msg.text)} style={buttonStyle}>🔈 Read</button>
+                  <button onClick={() => generateOutline(msg.text)} style={buttonStyle}>🧾 Generate Outline</button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
-      )}
 
-      <div style={inputContainerStyle}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your message..."
-          style={inputStyle}
-        />
-        <button onClick={sendMessage} style={actionButtonStyle}>Send</button>
-        <button onClick={startMic} style={actionButtonStyle}>🎤 Mic</button>
-        <button onClick={stopMessage} style={actionButtonStyle}>⛔ Stop</button>
+        {showOutlineModal && (
+          <div style={modalStyle}>
+            <h3>🧾 Presentation Outline</h3>
+            <div style={{ marginTop: "1px", display: "flex", gap: "10px" }}>
+              <button onClick={() => navigator.clipboard.writeText(outlineText)}>📋 Copy</button>
+              <button onClick={exportToPPT}>📊 Export to PPT</button>
+              <button onClick={exportToPDF}>📄 Export to PDF</button>
+              <button onClick={() => setShowOutlineModal(false)}>❌ Close</button>
+            </div>
+            <pre style={preStyle}>{outlineText}</pre>
+          </div>
+        )}
+
+        {smartPrompts.length > 0 && (
+          <div style={{ padding: '10px 20px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Suggestions:</div>
+            {smartPrompts.map((prompt, idx) => (
+              <button
+                key={idx}
+                onClick={() => setInput(prompt)}
+                style={promptStyle}
+              >
+                {`${idx + 1}. ${prompt}`}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={inputContainerStyle}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message..."
+            style={inputStyle}
+          />
+          <button onClick={sendMessage} style={actionButtonStyle}>Send</button>
+          <button onClick={startMic} style={actionButtonStyle}>🎤 Mic</button>
+          <button onClick={stopMessage} style={actionButtonStyle}>⛔ Stop</button>
+        </div>
       </div>
-    </div>
+
+      <style>
+        {`
+          .message-content {
+          display: flex;
+          gap: 6px;
+          align-items: baseline;
+          margin-top: 14px;
+        }
+
+        .sender-label {
+          font-weight: bold;
+          white-space: nowrap;
+          margin-top: 2px;
+        }
+
+        .message-text strong {
+          font-weight: bold;
+        }
+
+        .message-text ul,
+        .message-text ol {
+          padding-left: 20px;
+          margin: 10px 0;
+        }
+
+        .message-text p {
+          margin: 5px 0;
+        }
+
+        .message-text code {
+          background-color: #f5f5f5;
+          padding: 2px 4px;
+          border-radius: 4px;
+          font-family: monospace;
+        }
+
+        `}
+      </style>
+    </>
   );
 };
 
