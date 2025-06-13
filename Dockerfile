@@ -18,4 +18,5 @@ RUN npm run build
 EXPOSE 8080
 
 # Use Vite's preview server to serve the app
-CMD ["npm", "run", "preview", "--", "--port", "8080", "--host"]
+# CMD ["npm", "run", "preview", "--", "--port", "8080", "--host"]
+CMD ["serve", "-s", "dist", "-l", "8080"]
