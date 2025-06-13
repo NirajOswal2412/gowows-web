@@ -8,6 +8,9 @@ WORKDIR /
 COPY package*.json ./
 RUN npm install
 
+# Install serve to host the app
+RUN npm install -g serve
+
 # Copy the application code
 COPY . .
 
